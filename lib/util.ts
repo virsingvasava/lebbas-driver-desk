@@ -46,3 +46,5 @@ export function fmtDuration(minutes: number): string {
   const m = Math.round(minutes % 60);
   return h ? `${h} h ${m} min` : `${m} min`;
 }
+
+export const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
