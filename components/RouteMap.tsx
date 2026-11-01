@@ -23,8 +23,8 @@ type Props = {
 type Entry = { m: any; p: Pinned; i: number };
 type Ctx = { L: any; map: any; layer: any; markers: Map<number, Entry>; meMarker: any; bounds: any[] };
 
-const TILES =
-  process.env.NEXT_PUBLIC_TILES_URL || 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+// OpenStreetMap tiles (free, no key). For heavy production use, set NEXT_PUBLIC_TILES_URL to a provider with a key.
+const TILES = process.env.NEXT_PUBLIC_TILES_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 const esc = (s: unknown): string =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
@@ -62,7 +62,7 @@ export default function RouteMap({ stops, selectedId, onSelect, me, command, onR
       const map = L.map(box.current, { zoomControl: false }).setView([25.2, 55.27], 10);
       L.tileLayer(TILES, {
         maxZoom: 19,
-        attribution: '© OpenStreetMap contributors © CARTO',
+        attribution: '© OpenStreetMap contributors',
       }).addTo(map);
       L.control.zoom({ position: 'bottomright' }).addTo(map);
 

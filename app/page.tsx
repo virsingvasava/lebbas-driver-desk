@@ -11,7 +11,7 @@ import RejectSheet from '@/components/RejectSheet';
 import StopCard from '@/components/StopCard';
 import { EMIRATES } from '@/lib/emirates';
 import type { RoadInfo, RouteResponse, Stop } from '@/lib/types';
-import { addDays, fmtDate, fmtDuration, mapsRouteUrl, mapsStopUrl, plural, todayDubai } from '@/lib/util';
+import { addDays, fmtDate, fmtDuration, hasPos, mapsRouteUrl, mapsStopUrl, plural, todayDubai } from '@/lib/util';
 
 const RouteMap = dynamic(() => import('@/components/RouteMap'), {
   ssr: false,
@@ -67,7 +67,7 @@ function Desk() {
   const [confirming, setConfirming] = useState<Stop | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [me, setMe] = useState<{ lat: number; lng: number } | null>(null);
-  const [road, setRoad] = useState<RoadInfo | null>(null);
+  const [road, setRoad] = useState<RoadInfo | null | undefined>(undefined);
   const [mapBig, setMapBig] = useState(false);
   const [command, setCommand] = useState<MapCommand>(null);
 
@@ -183,6 +183,11 @@ function Desk() {
     });
     return c;
   }, [stops]);
+  useEffect(() => {
+    setRoad(undefined); // new stops -> road distance is being calculated again
+  }, [stops]);
+
+  const pinnedCount = stops.filter(hasPos).length;
   const etas = stops.map((s) => s.eta).filter(Boolean) as string[];
   const lateCount = stops.filter((s) => s.late).length;
   const next = stops[0];
@@ -342,8 +347,16 @@ function Desk() {
                 <Tile
                   icon="route"
                   label="Road"
-                  value={road ? `${Math.round(road.km)} km` : '…'}
-                  sub={road ? fmtDuration(road.minutes) : 'calculating'}
+                  value={pinnedCount < 2 ? '—' : road ? `${Math.round(road.km)} km` : road === null ? 'n/a' : '…'}
+                  sub={
+                    pinnedCount < 2
+                      ? 'needs 2+ stops'
+                      : road
+                        ? fmtDuration(road.minutes)
+                        : road === null
+                          ? 'straight line only'
+                          : 'calculating'
+                  }
                 />
                 <Tile
                   icon="alert"
