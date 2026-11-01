@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 
 /** Server-side call to the Laravel API (the token never reaches the phone). */
 export async function laravel(method: 'GET' | 'POST', path: string, body?: unknown): Promise<NextResponse> {
-  const base = (process.env.LARAVEL_API_BASE ?? '').replace(/\/+$/, '');
+
+  const base = (process.env.LARAVEL_API_BASE || 'https://api.lebbas.com/api/v1').replace(/\/+$/, '');
   const headers: Record<string, string> = { Accept: 'application/json' };
 
   if (process.env.LARAVEL_API_TOKEN) headers.Authorization = `Bearer ${process.env.LARAVEL_API_TOKEN}`;
