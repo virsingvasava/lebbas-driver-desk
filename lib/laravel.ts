@@ -21,7 +21,18 @@ export async function laravel(method: 'GET' | 'POST', path: string, body?: unkno
       status: res.status,
       headers: { 'Content-Type': res.headers.get('content-type') ?? 'application/json' },
     });
-  } catch {
-    return NextResponse.json({ error: 'api_unreachable' }, { status: 502 });
+  } catch (e) {
+    const cause = (e as { cause?: unknown })?.cause;
+    console.error('Laravel call failed:', String(e), cause ? String(cause) : '');
+
+    return NextResponse.json(
+      {
+        error: 'api_unreachable',
+        base_set: Boolean(base),
+        detail: String(e),
+        cause: cause ? String(cause) : null,
+      },
+      { status: 502 },
+    );
   }
 }
