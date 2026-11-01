@@ -4,12 +4,17 @@ import { useState } from 'react';
 
 const SRC = process.env.NEXT_PUBLIC_LOGO_URL || 'https://lebbas.com/logo.png';
 
-export default function Logo({ size = 44 }: { size?: number }) {
+interface LogoProps {
+  size?: number;
+  className?: string;
+}
+
+export default function Logo({ size = 44, className = '' }: LogoProps) {
   const [failed, setFailed] = useState(false);
 
   return (
     <span
-      className="flex shrink-0 items-center justify-center rounded-full bg-white shadow-md ring-2 ring-leaf-500"
+      className={`flex shrink-0 items-center justify-center rounded-full bg-white shadow-md ring-2 ring-leaf-500 ${className}`}
       style={{ width: size, height: size }}
     >
       {failed ? (

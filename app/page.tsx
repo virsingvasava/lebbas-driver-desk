@@ -4,53 +4,23 @@ import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import ConfirmSheet from '@/components/ConfirmSheet';
-import Icon, { type IconName } from '@/components/Icon';
+import Footer from '@/components/Footer';
+import Header from '@/components/Header';
+import Icon from '@/components/Icon';
 import Logo from '@/components/Logo';
 import type { MapCommand } from '@/components/RouteMap';
 import RejectSheet from '@/components/RejectSheet';
 import StopCard from '@/components/StopCard';
 import { EMIRATES } from '@/lib/emirates';
 import type { RoadInfo, RouteResponse, Stop } from '@/lib/types';
-import { addDays, fmtDate, fmtDuration, hasPos, mapsRouteUrl, mapsStopUrl, plural, todayDubai } from '@/lib/util';
+import { addDays, fmtDate, hasPos, mapsRouteUrl, mapsStopUrl, plural, todayDubai } from '@/lib/util';
 
 const RouteMap = dynamic(() => import('@/components/RouteMap'), {
   ssr: false,
-  loading: () => <div className="h-full w-full animate-pulse bg-brand-50" />,
+  loading: () => <div className="h-full w-full animate-pulse bg-slate-100" />,
 });
 
-const DAYS = [
-  { label: 'Yesterday', off: -1 },
-  { label: 'Today', off: 0 },
-  { label: 'Tomorrow', off: 1 },
-];
-
 type ActionName = 'picked_up' | 'reject' | 'set_time';
-
-function Tile({
-  icon,
-  label,
-  value,
-  sub,
-  tone = 'normal',
-}: {
-  icon: IconName;
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: 'normal' | 'warn';
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-400">
-        <Icon name={icon} className="h-3.5 w-3.5" /> {label}
-      </div>
-      <div className={`mt-1 text-lg font-extrabold leading-tight ${tone === 'warn' ? 'text-red-600' : 'text-brand-800'}`}>
-        {value}
-      </div>
-      {sub && <div className="text-xs text-slate-500">{sub}</div>}
-    </div>
-  );
-}
 
 function Desk() {
   const params = useSearchParams();
@@ -68,15 +38,15 @@ function Desk() {
   const [toast, setToast] = useState<string | null>(null);
   const [me, setMe] = useState<{ lat: number; lng: number } | null>(null);
   const [road, setRoad] = useState<RoadInfo | null | undefined>(undefined);
-  const [mapBig, setMapBig] = useState(false);
+  const [mapExpanded, setMapExpanded] = useState(false);
   const [command, setCommand] = useState<MapCommand>(null);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   const flash = useCallback((msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3500);
   }, []);
 
-  // ---- load the route ----
   const load = useCallback(
     async (silent = false) => {
       if (!d || !t) {
@@ -98,7 +68,7 @@ function Desk() {
         setRoute((await res.json()) as RouteResponse);
         setError(null);
       } catch {
-        if (silent) flash('Connection problem — showing the last saved route');
+        if (silent) flash('Connection problem — showing last saved route');
         else setError('network');
       } finally {
         setLoading(false);
@@ -111,7 +81,6 @@ function Desk() {
     load();
   }, [load]);
 
-  // refresh every minute + when the phone comes back to the page
   useEffect(() => {
     const id = setInterval(() => load(true), 60000);
     const onVis = () => {
@@ -124,7 +93,6 @@ function Desk() {
     };
   }, [load]);
 
-  // driver's GPS position
   useEffect(() => {
     if (!('geolocation' in navigator)) return;
     const w = navigator.geolocation.watchPosition(
@@ -135,14 +103,12 @@ function Desk() {
     return () => navigator.geolocation.clearWatch(w);
   }, []);
 
-  // keep the selected card in view
   useEffect(() => {
     if (selectedId != null) {
       document.getElementById(`stop-${selectedId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [selectedId]);
 
-  // ---- actions ----
   const act = useCallback(
     async (stop: Stop, action: ActionName, extra: Record<string, string> = {}) => {
       setBusyId(stop.id);
@@ -174,7 +140,6 @@ function Desk() {
     [d, t, load, flash],
   );
 
-  // ---- derived ----
   const stops = useMemo<Stop[]>(() => route?.stops ?? [], [route]);
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -183,8 +148,9 @@ function Desk() {
     });
     return c;
   }, [stops]);
+
   useEffect(() => {
-    setRoad(undefined); // new stops -> road distance is being calculated again
+    setRoad(undefined);
   }, [stops]);
 
   const pinnedCount = stops.filter(hasPos).length;
@@ -193,22 +159,24 @@ function Desk() {
   const next = stops[0];
   const nextUrl = next ? mapsStopUrl(next) : null;
   const allUrl = mapsRouteUrl(stops);
-  const isPreset = DAYS.some((x) => addDays(todayDubai(), x.off) === date);
 
-  // ---- invalid link ----
+  const dateList = Array.from({ length: 25 }, (_, i) => {
+    const off = i - 7;
+    const iso = addDays(todayDubai(), off);
+    return { iso, label: fmtDate(iso) };
+  });
+
   if (error === 'invalid') {
     return (
-      <div className="flex h-dvh items-center justify-center bg-gradient-to-br from-brand-900 to-brand-700 p-6">
-        <div className="w-full max-w-sm rounded-3xl bg-white p-7 text-center shadow-2xl">
-          <div className="mx-auto mb-3 flex justify-center">
-            <Logo size={64} />
+      <div className="flex min-h-screen items-center justify-center bg-slate-900 p-4">
+        <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-xl">
+          <Logo size={56} className="mx-auto mb-4" />
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+            <Icon name="lock" className="h-6 w-6" />
           </div>
-          <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500">
-            <Icon name="lock" className="h-5 w-5" />
-          </div>
-          <h1 className="text-lg font-extrabold">Link not valid</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Please open the <b>Driver Desk</b> link from your Lebas WhatsApp chat.
+          <h1 className="text-lg font-bold text-slate-900">Link Expired or Invalid</h1>
+          <p className="mt-2 text-xs leading-relaxed text-slate-500">
+            Please open your personalized <b>Driver Desk</b> link sent via WhatsApp.
           </p>
         </div>
       </div>
@@ -216,166 +184,114 @@ function Desk() {
   }
 
   return (
-    <div className="flex h-dvh flex-col">
-      {/* ================= header ================= */}
-      <header className="relative z-20 shrink-0 bg-gradient-to-br from-brand-900 via-brand-800 to-brand-600 text-white shadow-lg">
-        <div className="flex items-center gap-3 px-4 pb-2 pt-3">
-          <Logo size={46} />
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-100/80">Lebas UAE · Driver desk</p>
-            <h1 className="truncate text-xl font-extrabold leading-tight">{route?.driver ?? 'Driver'}</h1>
-          </div>
-          <button
-            type="button"
-            onClick={() => load()}
-            aria-label="Refresh"
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 active:bg-white/25"
-          >
-            <Icon name="refresh" className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
+    <div className="fixed inset-0 flex flex-col overflow-hidden bg-slate-50 font-sans text-slate-900 antialiased">
+      {/* Modular Header Component */}
+      <Header
+        driverName={route?.driver}
+        date={date}
+        setDate={setDate}
+        loading={loading}
+        onRefresh={() => load()}
+        onOpenCalendar={() => setIsCalendarOpen(true)}
+      />
 
-        <div className="flex items-center gap-2 px-4 pb-3">
-          <div className="flex rounded-full bg-black/25 p-1">
-            {DAYS.map(({ label, off }) => {
-              const iso = addDays(todayDubai(), off);
-              const active = iso === date;
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => setDate(iso)}
-                  className={`rounded-full px-3 py-1.5 text-sm font-bold transition ${
-                    active ? 'bg-white text-brand-800 shadow' : 'text-white/90'
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-
-          <label
-            className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
-              isPreset ? 'bg-white/15 text-white' : 'bg-white text-brand-800'
-            }`}
-          >
-            <Icon name="calendar" className="h-5 w-5" />
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => e.target.value && setDate(e.target.value)}
-              aria-label="Choose a date"
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-            />
-          </label>
-
-          <span className="ml-auto text-sm font-semibold text-brand-100">{fmtDate(date)}</span>
-        </div>
-        <div className="h-1 bg-leaf-500" />
-      </header>
-
-      {/* ================= body ================= */}
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        {/* map */}
+      {/* Workspace Body */}
+      <main className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        {/* Interactive Map Section */}
         <section
-          className={`relative shrink-0 bg-brand-50 transition-[height] duration-300 lg:order-2 lg:h-auto lg:flex-1 ${
-            mapBig ? 'h-[64dvh]' : 'h-[34dvh]'
+          className={`relative shrink-0 bg-slate-200 transition-all duration-300 lg:order-2 lg:h-auto lg:flex-1 ${
+            mapExpanded ? 'h-[65dvh]' : 'h-[42dvh]'
           }`}
         >
-          <RouteMap stops={stops} selectedId={selectedId} onSelect={setSelectedId} me={me} command={command} onRoad={setRoad} />
+          <RouteMap
+            stops={stops}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            me={me}
+            command={command}
+            onRoad={setRoad}
+          />
 
-          {/* floating controls */}
-          <div className="pointer-events-none absolute inset-x-3 bottom-3 z-[1000] flex items-end justify-between gap-2">
+          {/* Map Overlay Floating Bar */}
+          <div className="pointer-events-none absolute inset-x-3 bottom-3 z-10 flex items-end justify-between gap-2">
             {nextUrl && next ? (
               <a
                 href={nextUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="pointer-events-auto flex min-w-0 max-w-[68%] items-center gap-2 rounded-full bg-brand-700 px-4 py-3 text-sm font-extrabold text-white shadow-xl active:bg-brand-800"
+                className="pointer-events-auto flex max-w-[72%] items-center gap-2 rounded-full bg-slate-900/90 px-3.5 py-2 text-xs font-bold text-white shadow-lg backdrop-blur-md transition active:scale-95"
               >
-                <Icon name="navigation" className="h-4 w-4 shrink-0" />
+                <Icon name="navigation" className="h-4 w-4 shrink-0 text-emerald-400" />
                 <span className="truncate">Next: {next.name ?? next.order_id}</span>
               </a>
             ) : (
               <span />
             )}
 
-            <div className="pointer-events-auto flex flex-col gap-2">
+            {/* Floating Map Utilities */}
+            <div className="pointer-events-auto flex flex-col gap-1.5">
               <button
                 type="button"
                 onClick={() => setCommand({ type: 'fit', n: Date.now() })}
-                aria-label="Show all stops"
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-brand-800 shadow-lg active:bg-brand-50"
+                aria-label="Fit map"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-700 shadow-md transition"
               >
-                <Icon name="route" className="h-5 w-5" />
+                <Icon name="route" className="h-4 w-4" />
               </button>
               <button
                 type="button"
                 disabled={!me}
                 onClick={() => setCommand({ type: 'me', n: Date.now() })}
                 aria-label="My location"
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-blue-600 shadow-lg active:bg-blue-50 disabled:text-slate-300"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-blue-600 shadow-md transition disabled:text-slate-300"
               >
-                <Icon name="locate" className="h-5 w-5" />
+                <Icon name="locate" className="h-4 w-4" />
               </button>
               <button
                 type="button"
-                onClick={() => setMapBig((v) => !v)}
-                aria-label={mapBig ? 'Smaller map' : 'Bigger map'}
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-700 shadow-lg active:bg-slate-100 lg:hidden"
+                onClick={() => setMapExpanded((v) => !v)}
+                aria-label="Toggle map size"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-700 shadow-md transition lg:hidden"
               >
-                <Icon name={mapBig ? 'shrink' : 'expand'} className="h-5 w-5" />
+                <Icon name={mapExpanded ? 'shrink' : 'expand'} className="h-4 w-4" />
               </button>
             </div>
           </div>
         </section>
 
-        {/* list */}
-        <aside className="min-h-0 flex-1 overflow-y-auto bg-canvas lg:order-1 lg:w-[440px] lg:flex-none lg:border-r lg:border-slate-200">
+        {/* Stops & Condensed Metrics Panel */}
+        <aside className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-slate-100/70 lg:order-1 lg:w-[440px] lg:flex-none lg:border-r lg:border-slate-200">
           {stops.length > 0 && (
-            <div className="space-y-3 px-3 pt-3">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2">
-                <Tile
-                  icon="box"
-                  label="Stops"
-                  value={String(stops.length)}
-                  sub={route && route.max > 0 ? `of ${route.max} max` : undefined}
-                  tone={route && route.max > 0 && stops.length > route.max ? 'warn' : 'normal'}
-                />
-                <Tile icon="clock" label="Timeline" value={etas.length ? `${etas[0]} → ${etas[etas.length - 1]}` : '—'} />
-                <Tile
-                  icon="route"
-                  label="Road"
-                  value={pinnedCount < 2 ? '—' : road ? `${Math.round(road.km)} km` : road === null ? 'n/a' : '…'}
-                  sub={
-                    pinnedCount < 2
-                      ? 'needs 2+ stops'
-                      : road
-                        ? fmtDuration(road.minutes)
-                        : road === null
-                          ? 'straight line only'
-                          : 'calculating'
-                  }
-                />
-                <Tile
-                  icon="alert"
-                  label="Late"
-                  value={String(lateCount)}
-                  sub={lateCount ? 'outside time slot' : 'all on time'}
-                  tone={lateCount ? 'warn' : 'normal'}
-                />
+            <div className="space-y-2.5 p-3">
+              {/* Compact Inline Stats Bar for Mobile */}
+              <div className="grid grid-cols-4 gap-1.5 rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-2xs">
+                <div className="text-center">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Stops</p>
+                  <p className="text-sm font-extrabold text-slate-900">{stops.length}</p>
+                </div>
+                <div className="border-l border-slate-100 text-center">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Distance</p>
+                  <p className="text-sm font-extrabold text-slate-900">{pinnedCount < 2 ? '—' : road ? `${Math.round(road.km)}km` : '...'}</p>
+                </div>
+                <div className="border-l border-slate-100 text-center">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Delayed</p>
+                  <p className={`text-sm font-extrabold ${lateCount ? 'text-rose-600' : 'text-slate-900'}`}>{lateCount}</p>
+                </div>
+                <div className="border-l border-slate-100 text-center">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Timeline</p>
+                  <p className="text-xs font-bold text-slate-700 truncate">{etas.length ? etas[0] : '—'}</p>
+                </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5">
+              {/* Emirate Filter Pills */}
+              <div className="flex flex-wrap items-center gap-1">
                 {Object.keys(counts).map((code) => (
                   <span
                     key={code}
-                    className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold"
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 shadow-2xs"
                   >
-                    <i className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: EMIRATES[code]?.color }} />
-                    {EMIRATES[code]?.name ?? code}
-                    <span className="text-slate-400">{counts[code]}</span>
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: EMIRATES[code]?.color || '#94a3b8' }} />
+                    {EMIRATES[code]?.name ?? code} ({counts[code]})
                   </span>
                 ))}
               </div>
@@ -385,58 +301,58 @@ function Desk() {
                   href={allUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex h-11 items-center justify-center gap-2 rounded-xl border-2 border-brand-600 bg-white text-sm font-extrabold text-brand-700 active:bg-brand-50"
+                  className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-slate-900 text-xs font-bold text-white shadow-2xs transition active:scale-[0.99]"
                 >
-                  <Icon name="navigation" className="h-4 w-4" />
-                  Open first {Math.min(10, stops.length)} in Google Maps
+                  <Icon name="navigation" className="h-3.5 w-3.5 text-emerald-400" />
+                  Open Route in Google Maps (Top {Math.min(10, stops.length)})
                 </a>
               )}
             </div>
           )}
 
-          <div className="px-3 pb-28 pt-3">
+          {/* Stops List */}
+          <div className="flex-1 px-3 pb-24 pt-1">
             {loading && !route && (
-              <div className="space-y-3">
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className="h-20 animate-pulse rounded-2xl bg-white" />
+              <div className="space-y-2.5">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-200" />
                 ))}
               </div>
             )}
 
             {error === 'network' && !route && (
-              <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
-                <p className="font-extrabold">Can’t reach the server</p>
-                <p className="mt-1 text-sm text-slate-500">Check your internet connection and try again.</p>
+              <div className="rounded-xl border border-slate-200 bg-white p-5 text-center shadow-2xs">
+                <p className="font-bold text-slate-800 text-sm">Connection Interrupted</p>
                 <button
                   type="button"
                   onClick={() => load()}
-                  className="mt-4 h-11 rounded-xl bg-brand-600 px-6 font-bold text-white active:bg-brand-700"
+                  className="mt-3 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs"
                 >
-                  Try again
+                  Retry Loading
                 </button>
               </div>
             )}
 
             {route && stops.length === 0 && (
-              <div className="rounded-3xl bg-white p-8 text-center shadow-sm">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-leaf-100 text-brand-700">
-                  <Icon name="party" className="h-7 w-7" />
+              <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-2xs">
+                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                  <Icon name="party" className="h-5 w-5" />
                 </div>
-                <p className="mt-3 text-lg font-extrabold">No pending pickups</p>
-                <p className="text-sm text-slate-500">{fmtDate(date)}</p>
+                <h3 className="mt-2 text-sm font-bold text-slate-900">All Done!</h3>
+                <p className="text-xs text-slate-500">No pending pickups for {fmtDate(date)}.</p>
               </div>
             )}
 
             {stops.length > 0 && (
-              <div className="mb-2 flex items-center justify-between px-1">
-                <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-500">
-                  Pickups · {plural(stops.length, 'stop')}
+              <div className="mb-2 flex items-center justify-between px-0.5">
+                <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  {plural(stops.length, 'Pickup')}
                 </h2>
-                <span className="text-xs text-slate-400">Tap a stop for actions</span>
+                <span className="text-[10px] text-slate-400">Tap card for options</span>
               </div>
             )}
 
-            <ul className="space-y-3">
+            <ul className="space-y-2.5">
               {stops.map((s, i) => (
                 <StopCard
                   key={s.id}
@@ -454,13 +370,16 @@ function Desk() {
             </ul>
           </div>
         </aside>
-      </div>
+      </main>
+
+      {/* Modular Footer Component */}
+      <Footer date={date} />
 
       {confirming && (
         <ConfirmSheet
-          title={`Picked up ${confirming.order_id}?`}
-          text={`${confirming.name ?? 'Customer'} — the order will be marked as completed.`}
-          confirmLabel="Yes, picked up"
+          title={`Confirm Pickup: ${confirming.order_id}`}
+          text={`Customer: ${confirming.name ?? 'Unknown'}. Proceeding will complete this stop.`}
+          confirmLabel="Mark Complete"
           busy={busyId === confirming.id}
           onCancel={() => setConfirming(null)}
           onConfirm={() => act(confirming, 'picked_up')}
@@ -477,11 +396,65 @@ function Desk() {
       )}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-[3000] flex w-[92%] max-w-sm -translate-x-1/2 items-center gap-2 rounded-2xl bg-brand-900 px-4 py-3 text-sm font-bold text-white shadow-2xl">
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-leaf-500 text-brand-900">
-            <Icon name="check" className="h-4 w-4" />
+        <div className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-xl">
+          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-slate-950">
+            <Icon name="check" className="h-3 w-3" />
           </span>
           {toast}
+        </div>
+      )}
+
+      {/* Root-Level Full-Screen Date Picker Modal (Guaranteed never to be hidden by map) */}
+      {isCalendarOpen && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="w-full max-w-xs rounded-3xl bg-emerald-950 border border-emerald-800 p-4 shadow-2xl text-white">
+            <div className="flex items-center justify-between pb-3 border-b border-emerald-900">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-400">Select Route Date</h3>
+              <button
+                type="button"
+                onClick={() => setIsCalendarOpen(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-900/60 text-emerald-200 hover:bg-emerald-800 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="my-3 max-h-72 overflow-y-auto space-y-1.5 pr-1">
+              {dateList.map(({ iso, label }) => {
+                const isSelected = iso === date;
+                return (
+                  <button
+                    key={iso}
+                    type="button"
+                    onClick={() => {
+                      setDate(iso);
+                      setIsCalendarOpen(false);
+                    }}
+                    className={`w-full rounded-xl px-3.5 py-2.5 text-left text-xs font-semibold transition flex items-center justify-between ${
+                      isSelected
+                        ? 'bg-emerald-500 text-slate-950 font-extrabold shadow-md'
+                        : 'bg-emerald-900/40 text-emerald-100 hover:bg-emerald-900'
+                    }`}
+                  >
+                    <span>{label}</span>
+                    {iso === todayDubai() && (
+                      <span className={`text-[9px] px-2 py-0.5 rounded-md uppercase font-extrabold ${isSelected ? 'bg-slate-950/20 text-slate-950' : 'bg-emerald-800 text-emerald-200'}`}>
+                        Today
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsCalendarOpen(false)}
+              className="w-full mt-1 rounded-xl bg-emerald-900/60 py-2 text-xs font-bold text-emerald-200 hover:bg-emerald-900 transition"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -492,8 +465,8 @@ export default function Page() {
   return (
     <Suspense
       fallback={
-        <div className="flex h-dvh items-center justify-center bg-gradient-to-br from-brand-900 to-brand-700">
-          <Logo size={72} />
+        <div className="flex min-h-screen items-center justify-center bg-slate-900">
+          <Logo size={64} />
         </div>
       }
     >
@@ -501,3 +474,4 @@ export default function Page() {
     </Suspense>
   );
 }
+

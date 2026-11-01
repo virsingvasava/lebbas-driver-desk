@@ -59,11 +59,13 @@ export default function RouteMap({ stops, selectedId, onSelect, me, command, onR
       const L = (await import('leaflet')).default;
       if (dead || !box.current) return;
 
-      const map = L.map(box.current, { zoomControl: false }).setView([25.2, 55.27], 10);
+      // Disabled attribution control here 👇
+      const map = L.map(box.current, { zoomControl: false, attributionControl: false }).setView([25.2, 55.27], 10);
+      
       L.tileLayer(TILES, {
         maxZoom: 19,
-        attribution: '© OpenStreetMap contributors',
       }).addTo(map);
+      
       L.control.zoom({ position: 'bottomright' }).addTo(map);
 
       ctx.current = { L, map, layer: L.layerGroup().addTo(map), markers: new Map(), meMarker: null, bounds: [] };
